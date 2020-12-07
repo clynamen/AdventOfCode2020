@@ -24,15 +24,15 @@ data WDag =  WDagElem Bag [(Int, WDag)] | WDagLeaf Bag
 -- tryAddConnection (WDagElem frm (x:xs)) weight to =
 --     WDagElem frm $ map tryAddConnection
 
-getParentInStatement :: Bag -> Statement -> [(Int, Bag)]
+getParentInStatement :: Bag -> Statement -> [Bag]
 getParentInStatement query (Statement parent children) = do
     (cnt, child) <- children
-    if query == child then [(cnt, parent)] else []
+    [parent | query == child]
 
-searchParents :: Bag -> [Statement] -> [(Int, Bag)]
+searchParents :: Bag -> [Statement] -> [Bag]
 searchParents query statements =
     let parents = concatMap (getParentInStatement query) statements
-        ancestors = concat $ [searchParents (snd parent) statements |
+        ancestors = concat $ [searchParents parent statements |
             parent <- parents]
     in parents ++ ancestors
 
@@ -86,6 +86,6 @@ main = do
     content <- readFile "input_07a.txt"
     let statements = rights $ map parseStatement $ lines content
     print "Part 1"
-    print $ length $ sortUniq $ map snd $ searchParents (Bag (Pattern "shiny") (Color "gold")) statements
+    print $ length $ sortUniq $ searchParents (Bag (Pattern "shiny") (Color "gold")) statements
     print "Part 2"
     print $ sum $ getDescendantsCount (Bag (Pattern "shiny") (Color "gold")) statements
