@@ -29,10 +29,10 @@ getParentInStatement query (Statement parent children) = do
     (cnt, child) <- children
     [parent | query == child]
 
-searchParents :: Bag -> [Statement] -> [Bag]
-searchParents query statements =
+searchAncestors :: Bag -> [Statement] -> [Bag]
+searchAncestors query statements =
     let parents = concatMap (getParentInStatement query) statements
-        ancestors = concat $ [searchParents parent statements |
+        ancestors = concat $ [searchAncestors parent statements |
             parent <- parents]
     in parents ++ ancestors
 
@@ -86,6 +86,6 @@ main = do
     content <- readFile "input_07a.txt"
     let statements = rights $ map parseStatement $ lines content
     print "Part 1"
-    print $ length $ sortUniq $ searchParents (Bag (Pattern "shiny") (Color "gold")) statements
+    print $ length $ sortUniq $ searchAncestors (Bag (Pattern "shiny") (Color "gold")) statements
     print "Part 2"
     print $ sum $ getDescendantsCount (Bag (Pattern "shiny") (Color "gold")) statements
