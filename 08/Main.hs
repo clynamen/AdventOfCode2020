@@ -1,10 +1,6 @@
 import Text.ParserCombinators.Parsec
-import Control.Monad
-import Text.ParserCombinators.Parsec.Char
-import Data.Either
 import Control.Monad.Trans.RWS.Lazy
     ( ask, get, put, runRWS, rws, RWS )
-import Data.Functor.Identity
 import Data.Set (Set)
 import qualified Data.Set as Set
 
@@ -47,13 +43,13 @@ runInstruction (Jmp jmpValue) = do
 runNextInstruction :: VM ()
 runNextInstruction = do
     instructions <- ask
-    VMState currentIp acc lastOp pastIps <- get
+    VMState currentIp _ _ pastIps <- get
     let nextInstruction = instructions !! currentIp
     if currentIp == length instructions
         then return ()
     else do
         runInstruction nextInstruction
-        VMState currentIp' acc' lastOp' pastIps' <- get
+        VMState currentIp' acc' _ _ <- get
         put $ VMState currentIp' acc' nextInstruction (Set.insert currentIp pastIps )
 
 
@@ -94,13 +90,6 @@ parseInstructionsFromFile :: String -> IO [Instruction]
 parseInstructionsFromFile fname = do
     content <- readFile fname
     return $ parseInstructions $ lines content
-
-runAndPrintNInstructions :: [Instruction] -> Int -> Int -> IO ()
-runAndPrintNInstructions instructions curStep maxStep
-    | curStep == maxStep = print "Done"
-    | otherwise = do
-        print $ runWithInstructions instructions $ runNInstructionsAtMost isProgramStop curStep
-        runAndPrintNInstructions instructions (curStep+1) maxStep 
 
 type StopCondition = VM Bool
 
@@ -144,14 +133,14 @@ replaceNopOrJmpInstruction i = replaceAtIndex i invertNopOrJmp
 enumerate = zip [0..]
 
 programsWithNopAndJmpReplaced :: [Instruction] -> [[Instruction]]
-programsWithNopAndJmpReplaced instructions = 
+programsWithNopAndJmpReplaced instructions =
     [ replaceNopOrJmpInstruction i instructions | (i, inst) <- enumerate instructions , isNopOrJmp inst]
 
 
 tripleFst (a, _, _) = a
 
 firstResultWithStopWithInstructionReplacement :: [Instruction] -> (Bool, VMState, Output)
-firstResultWithStopWithInstructionReplacement instructions = 
+firstResultWithStopWithInstructionReplacement instructions =
     let programs = programsWithNopAndJmpReplaced instructions
         results = [runWithInstructions program $ runNInstructionsAtMost isProgramStop 1000 | program <- programs]
     in head $ [result | result <- results, tripleFst result]
@@ -159,10 +148,7 @@ firstResultWithStopWithInstructionReplacement instructions =
 main :: IO ()
 main = do
     instructions <- parseInstructionsFromFile "input_08a.txt"
-    -- runAndPrintNInstructions instructions 0 300
     print "Part one"
     print $ runWithInstructions instructions $ runNInstructionsAtMost instructionWasAlreadyExecuted 1000
     print "Part two"
-    -- print $ runWithInstructions instructions $ runNInstructionsAtMost isProgramStop 300
-    -- print $ programsWithNopAndJmpReplaced instructions
     print $ firstResultWithStopWithInstructionReplacement instructions
