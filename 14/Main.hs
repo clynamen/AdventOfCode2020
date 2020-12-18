@@ -11,6 +11,16 @@ import Data.Maybe (listToMaybe, fromJust)
 import Numeric    (readInt)
 import Data.Bits
 
+type Addr = Int
+
+type Memory = Map Int Int
+
+data Operation = SetMask Mask | WriteMem Addr Int deriving (Show)
+
+type MachineState = (Memory, Mask)
+
+type WriteMemOp = Addr -> Int -> ReaderT MachineState Identity MachineState
+
 data Mask = Mask
   { mask :: Int,
     override :: Int
@@ -21,18 +31,14 @@ readBin = fmap fst . listToMaybe . readInt 2 (`elem` "01") digitToInt
 -- readBin "1001" == Just 9
 
 showAsBinary :: Int -> String
-showAsBinary x = showIntAtBase 2 intToDigit x ""
-
+showAsBinary x =
+  let value = showIntAtBase 2 intToDigit x ""
+      suffixLen = 36 - length value
+  in replicate  suffixLen '0' ++ value
 
 instance Show Mask where
    show (Mask mask' override') =
        "Mask {mask = " ++ showAsBinary mask' ++ ", override = " ++ showAsBinary override' ++ "}"
-
-type Addr = Int
-
-type Memory = Map Int Int
-
-data Operation = SetMask Mask | WriteMem Addr Int deriving (Show)
 
 startsWith :: String -> String -> Bool
 startsWith str start = all (==True) $ zipWith (==) str start
@@ -81,32 +87,72 @@ applyMask (Mask mask' override') value =
     let maskedValue = mask' .&. value
     in maskedValue .|. override'
 
-type MachineState = (Memory, Mask)
-
-writeMem :: Addr -> Int -> ReaderT MachineState Identity MachineState 
+writeMem :: WriteMemOp
 writeMem addr value = do
     (mem, currentMask) <- ask
     let newValue = applyMask currentMask value
         newMem = Map.insert addr newValue mem
     return (newMem, currentMask)
 
-runOps :: [Operation] -> ReaderT MachineState Identity MachineState
-runOps [] = do ask
-runOps (op:ops) = do
+addressFloating :: Addr -> Int -> [Addr]
+addressFloating addr m = do
+  i <- [0..35]
+  let shifted = 1 `shiftL` i
+  if m .&. shifted > 0 then
+    [addr .|. shifted]
+  else []
+
+powerset :: [a] -> [[a]]
+powerset [] = [[]]
+powerset (x:xs) = [x:ps | ps <- powerset xs] ++ powerset xs
+
+
+addressPowerSet :: Addr -> Int -> [Addr]
+addressPowerSet addr m =
+  let addrs = addressFloating addr m
+      sets = powerset addrs
+  in map (foldl (.|.) addr) sets
+
+writeMem2 :: WriteMemOp
+writeMem2 addr newValue = do
+    (mem, currentMask) <- ask
+    let newAddr = (addr .|. override currentMask) `unset` mask currentMask
+        floatingAddrs = addressPowerSet newAddr (mask currentMask)
+        newMem = foldl (\memory floatingAddr ->
+          Map.insert floatingAddr newValue memory) mem floatingAddrs
+    return (newMem, currentMask)
+
+runOps :: WriteMemOp -> [Operation] -> ReaderT MachineState Identity MachineState
+runOps _ [] = do ask
+runOps writeMemOp (op:ops) = do
     (newMem, newMask) <- case op of
         SetMask m -> do
             (mem, _) <- ask
             return (mem, m)
         WriteMem addr value -> do
-            writeMem addr value
-    local ( const (newMem, newMask) ) $ runOps ops
+            writeMemOp addr value
+    local ( const (newMem, newMask) ) $ runOps writeMemOp ops
+
 
 initialState :: MachineState
 initialState = (Map.empty, Mask 0 0 )
 
+unset :: Int -> Int -> Int
+unset a b =
+  let allSet = fromJust $ readBin (replicate 36 '1')
+      mask = allSet `xor` b
+  in a .&. mask
+
 main :: IO ()
 main = do
   ops <- parseOperationsFromFile "input_14a.txt"
-  let finalState = runReader (runOps ops) initialState 
+
+  let finalState = runReader (runOps writeMem ops) initialState
       writtenValues = elems $ fst finalState
+  print "part 1"
+  print $ sum writtenValues
+
+  let finalState = runReader (runOps writeMem2 ops) initialState
+      writtenValues = elems $ fst finalState
+  print "part 2"
   print $ sum writtenValues
