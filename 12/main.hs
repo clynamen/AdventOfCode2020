@@ -84,7 +84,6 @@ applyActions2 actions state =
 manhDist :: Vec2 -> Vec2 -> Int
 manhDist (ax, ay) (bx, by) = abs (ax-bx) + abs (ay-by)
 
-
 main :: IO ()
 main = do
     actions <- getActionsFromFile "input_12a.txt"

@@ -125,6 +125,7 @@ count fun = sum . map (fromEnum . fun)
 countOccupied :: Map -> Int
 countOccupied m = count (=='#') $ dat m
 
+
 main :: IO ()
 main = do
     m <- readMapFromFile "input_11a.txt"
