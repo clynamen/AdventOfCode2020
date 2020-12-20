@@ -103,8 +103,8 @@ columnMatchRule' values (Rule _ ranges) =
     value <- values
     return $ any (==True) $ map (inRange value) ranges
 
-columnMatchRule ::  [Int] -> Rule -> Bool
-columnMatchRule values (Rule _ ranges) = 
+columnMatchRule :: Rule -> [Int] -> Bool
+columnMatchRule (Rule _ ranges) values = 
     all (==True) $ do 
     value <- values
     return $ any (==True) $ map (inRange value) ranges
@@ -122,9 +122,9 @@ distribute (x:xs) =
             else [this:solution]
     in filter (not . null) newSolutions
 
-searchMatchingRule :: [Rule] -> [Int] -> [Int]
-searchMatchingRule rules column = 
-    let matchingRules = map (columnMatchRule column) rules
+searchMatchingColumn :: [[Int]] -> Rule -> [Int]
+searchMatchingColumn  columns rule = 
+    let matchingRules = map (columnMatchRule rule) columns
     in map fst $ filter  ( (==True) . snd) $ enumerate matchingRules
 
 startsWith :: String -> String -> Bool
@@ -134,11 +134,12 @@ startsWith query value =
 -- solve2 :: [Rule] -> [Ticket] -> Ticket -> Int
 solve2 rules tickets myTicket = 
     let columns = transpose tickets 
-        matchingRules = map (searchMatchingRule rules) columns
-        distribution = head $ distribute matchingRules
+        matchingColumns = map (searchMatchingColumn columns) rules
+        distribution = head $ distribute matchingColumns
         ruleWithOrder = zip rules distribution
-    in product [ myTicket !! index | (key, index) <- ruleWithOrder, startsWith "departure" (ruleKey key) ] 
-    -- in ruleWithOrder
+        result = product [ myTicket !! index | (key, index) <- ruleWithOrder, startsWith "departure" (ruleKey key) ] 
+        -- result = zip (map ruleKey rules) matchingColumns
+    in result
 
 
 main :: IO ()
@@ -151,7 +152,7 @@ main = do
        result1 = solve1 rules otherTickets
        validTickets = [ticket | ticket <- otherTickets, isTicketValid rules ticket]
    print result1
-   let result2 = solve2 rules validTickets myTicket
+   let result2 = solve2 rules (myTicket:validTickets) myTicket
     --    columns = transpose validTickets
 --    print $ columns !! 0
 --    print $ columnMatchRule' (columns !! 0) (rules !! 1)
