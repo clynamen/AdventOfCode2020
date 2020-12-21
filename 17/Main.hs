@@ -4,42 +4,50 @@ import Debug.Trace
 import Data.Map (Map)
 import qualified Data.Map as Map
 
-data Vec3 = Vec3 {
+data Vec4 = Vec4 {
     vecX :: Int,
     vecY :: Int,
-    vecZ :: Int
+    vecZ :: Int,
+    vecW :: Int
 } deriving (Show, Eq)
 
-vecToKey :: Vec3 -> Int 
-vecToKey (Vec3 ax ay az) = (ax*1000000 + ay * 1000 + az) 
 
-instance Ord Vec3 where  
-    a <= b = vecToKey a <= vecToKey b
+instance Ord Vec4 where  
+    a <= b = vecToList a <= vecToList b
 
 
-vecToList :: Vec3 -> [Int]
-vecToList vec = [vecX vec, vecY vec, vecZ vec]
+vecToList :: Vec4 -> [Int]
+vecToList vec = [vecX vec, vecY vec, vecZ vec, vecW vec]
 
-listToVec :: [Int] -> Vec3
-listToVec list = Vec3 (list !! 0) (list !! 1) (list !! 2)
+listToVec :: [Int] -> Vec4
+listToVec list = Vec4 (list !! 0) (list !! 1) (list !! 2) (list !! 3)
 
-addVec :: Vec3 -> Vec3 -> Vec3
+addVec :: Vec4 -> Vec4 -> Vec4
 addVec a b = listToVec $ zipWith (+) (vecToList a) (vecToList b)
 
-neighbours :: Vec3 -> [Vec3]
+neighbours :: Vec4 -> [Vec4]
 neighbours origin = do
     dx <- [-1..1]
     dy <- [-1..1]
     dz <- [-1..1]
     if dx == 0 && dy == 0 && dz == 0 then []
-    else [origin `addVec` Vec3 dx dy dz] 
+    else [origin `addVec` Vec4 dx dy dz 0] 
 
-type Map3d = Map Vec3 Char
+neighbours4 :: Vec4 -> [Vec4]
+neighbours4 origin = do
+    dx <- [-1..1]
+    dy <- [-1..1]
+    dz <- [-1..1]
+    dw <- [-1..1]
+    if dx == 0 && dy == 0 && dz == 0 && dw == 0 then []
+    else [origin `addVec` Vec4 dx dy dz dw] 
+
+type Map3d = Map Vec4 Char
 
 enumerate :: [a] -> [(Int, a)]
 enumerate xs = zip [0..length xs] xs
 
-mapGetAt :: Map3d -> Vec3 -> Char
+mapGetAt :: Map3d -> Vec4 -> Char
 mapGetAt m v = 
     case Map.lookup v m of 
         Just c -> c
@@ -48,38 +56,40 @@ mapGetAt m v =
 count :: (Eq a) => (a -> Bool) -> [a] -> Int
 count pred xs = length [x | x <- xs, pred x]
 
-countActiveNeightborhood :: Map3d -> Vec3 -> Int
-countActiveNeightborhood m origin = count (=='#') $ map (mapGetAt m) $ neighbours origin
+type NeighborhoodFunction = Vec4 -> [Vec4]
 
-nextValue :: Map3d -> Vec3 -> Char -> Map3d
-nextValue m origin c = 
-    let activeNeighborhoodCount = countActiveNeightborhood m origin
+countActiveNeightborhood :: NeighborhoodFunction -> Map3d -> Vec4 -> Int
+countActiveNeightborhood nf m origin = count (=='#') $ map (mapGetAt m) $ nf origin
+
+nextValue :: NeighborhoodFunction -> Map3d -> Vec4 -> Char -> Map3d
+nextValue nf m origin c = 
+    let activeNeighborhoodCount = countActiveNeightborhood nf m origin
         newC = case c of 
             '#' | activeNeighborhoodCount == 2 || activeNeighborhoodCount == 3 -> '#'
             '.' | activeNeighborhoodCount == 3 -> '#'
             otherwise  -> '.'
     in Map.singleton origin newC
 
-addInactiveNeighborhood :: Map3d -> Map3d
-addInactiveNeighborhood m = m `Map.union` (Map.fromList $ zip (concat $ map neighbours (Map.keys m )) (repeat '.') )
+addInactiveNeighborhood :: NeighborhoodFunction -> Map3d -> Map3d
+addInactiveNeighborhood nf m = m `Map.union` (Map.fromList $ zip (concat $ map nf (Map.keys m )) (repeat '.') )
 
-getNextValueAndJoin :: Map3d -> Vec3 -> Char -> Map3d -> Map3d
+getNextValueAndJoin :: NeighborhoodFunction -> Map3d -> Vec4 -> Char -> Map3d -> Map3d
 -- getNextValueAndJoin m origin c newMap | trace ("getNextValueAndJoin" ++ show origin ++ " newMap= " ++ show newMap ++ "\n") False = undefined
-getNextValueAndJoin m origin c newMap = Map.union (nextValue m origin c) newMap 
+getNextValueAndJoin nf m origin c newMap = Map.union (nextValue nf m origin c) newMap 
 
-nextCycle :: Map3d -> Map3d
-nextCycle m = Map.foldrWithKey (getNextValueAndJoin m) Map.empty (addInactiveNeighborhood m)
+nextCycle :: NeighborhoodFunction -> Map3d -> Map3d
+nextCycle nf m = Map.foldrWithKey (getNextValueAndJoin nf m) Map.empty (addInactiveNeighborhood nf m)
 
-runNCycles :: Int -> Map3d -> Map3d
-runNCycles 0 m = m 
-runNCycles n m = nextCycle $ runNCycles (n-1) m
+runNCycles :: NeighborhoodFunction -> Int -> Map3d -> Map3d
+runNCycles nf 0 m = m 
+runNCycles nf n m = nextCycle nf $ runNCycles nf (n-1) m
 
 parseInitialMap :: [[Char]] -> Map3d
 parseInitialMap rows = 
     Map.fromList $ do
         (dy, row) <- enumerate rows
         (dx, char) <- enumerate row
-        [(Vec3 dx dy 0, char)]
+        [(Vec4 dx dy 0 0, char)]
 
 countActiveInMap :: Map3d -> Int
 countActiveInMap m = Map.foldr (\x -> (+) (fromEnum $ x=='#') ) 0 m
@@ -103,16 +113,16 @@ printMap m =
             let xs = [-10..10]
                 ys = [-10..10]
                 zs = [-1..1] 
-            in  [[[mapGetAt m (Vec3 x y z) | x <- xs] | y <- ys] | z <- zs] 
-    in mapM_ (print2DMap) vecs
+            in  [[[mapGetAt m (Vec4 x y z 0) | x <- xs] | y <- ys] | z <- zs] 
+    in mapM_ print2DMap vecs
     
 
 main :: IO ()
 main = do
     fileRows <- lines <$> readFile "input_17a.txt"
+    putStrLn "first part"
     let firstLayer = parseInitialMap fileRows
-        lastCycleResult = runNCycles 6 firstLayer
-        testOrigin = Vec3 2 2 (-1)
-    putStrLn ""
-    print $ nextValue firstLayer testOrigin (mapGetAt firstLayer testOrigin) 
+        lastCycleResult = runNCycles neighbours 6 firstLayer
     print $ countActiveInMap lastCycleResult
+    putStrLn "\nsecond part"
+    print $ countActiveInMap $ runNCycles neighbours4 6 firstLayer
